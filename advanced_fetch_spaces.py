@@ -1,122 +1,172 @@
 import json
 import pandas as pd
-from huggingface_hub import HfApi
 import os
+import string
+import nltk
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+import scipy.sparse
+import pickle
 
-# Categories dictionary
-categories = {
-    "Voice/Audio Processing": ["speech", "audio", "voice", "tts", "asr", "speaker", "sound", "musicgeneration"],
-    "Image Processing/Generation": ["image", "diffusion", "gan", "jpeg", "vision", "segmentation", "inpainting", "outpainting", "lora", "dreambooth", "controlnet", "photomaker", "transparent-background", "face-swap", "ip-adapter"],
-    "Video Processing/Generation": ["video", "motion", "animation", "streamdiffusion"],
-    "Text Processing/Generation": ["text", "nlp", "llm", "language-model", "summarization", "translation", "rag", "chat", "mistral", "llama", "gemma", "bert", "gpt", "phi", "rwkv", "bitnet"],
-    "Code Generation/Assistants": ["code", "coding", "developer-tools"],
-    "Machine Learning/AI Tools": ["pytorch", "tensorflow", "jax", "onnx", "tensorrt", "autotrain", "transformers", "diffusers", "peft", "accelerate", "optimum", "trl", "keras", "explainability", "synthetic-data", "model-editing"],
-    "Data Science/Analytics": ["data", "csv", "json", "visualization", "dashboard", "embed", "webqna"],
-    "Gaming/Simulation": ["game", "gaming"],
-    "Robotics/Agents": ["robotics", "agent"],
-    "Educational/Research": ["research", "education", "arxiv"],
-    "Utilities/Miscellaneous": ["utils", "tool", "docker", "gradio", "streamlit", "api", "official", "community", "template", "course", "tutorial", "other", "web", "mcp-server", "mcp-client", "mcp-vision-receiver", "mcp-vision-sender", "mcp-controller", "mcp-agent", "mcp-tts", "mcp-asr", "mcp-comfyui"],
-}
+def ensure_nltk_data_path():
+    user_nltk_data = os.path.expanduser('~/nltk_data')
+    if user_nltk_data not in nltk.data.path:
+        nltk.data.path.append(user_nltk_data)
 
-def categorize_space(title_or_id_suffix, tags):
-    if not isinstance(tags, list):
-        tags = []
-    normalized_tags = [str(tag).lower() for tag in tags]
-    normalized_title = str(title_or_id_suffix).lower()
-    for category, keywords in categories.items():
-        for keyword in keywords:
-            if any(keyword in tag for tag in normalized_tags):
-                return category
-            if keyword in normalized_title:
-                return category
-    return "Other"
-
-
-def fetch_process_categorize_and_save_final_data():
-    hf_api = HfApi()
-    fetch_limit = 200
-    print(f"Fetching {fetch_limit} spaces from Hugging Face Hub...")
-    spaces_generator = hf_api.list_spaces(full=True, limit=fetch_limit)
-
-    all_spaces_data_raw = []
-    count = 0
-    for space_info in spaces_generator:
-        space_dict = {
-            'id': space_info.id,
-            'author': space_info.author,
-            'likes': space_info.likes,
-            'tags': getattr(space_info, 'tags', []),
-            'sdk': getattr(space_info, 'sdk', None),
-            'cardData': getattr(space_info, 'cardData', None),
-            'models': getattr(space_info, 'models', []),
-            'datasets': getattr(space_info, 'datasets', [])
-        }
-        all_spaces_data_raw.append(space_dict)
-        count += 1
-        if count % 100 == 0:
-            print(f"Fetched {count} spaces so far...")
-
-    total_fetched_before_filter = len(all_spaces_data_raw)
-    print(f"\nTotal number of spaces fetched before filtering: {total_fetched_before_filter}")
-
-    filtered_spaces_intermediate = [
-        space for space in all_spaces_data_raw if space.get('likes', 0) >= 2
-    ]
-    total_fetched_after_filter = len(filtered_spaces_intermediate)
-    print(f"Total number of spaces after filtering (likes >= 2): {total_fetched_after_filter}")
-
-    processed_for_df = []
-    for space in filtered_spaces_intermediate:
-        processed_space = space.copy()
-        card_data_obj = processed_space['cardData']
-        if card_data_obj is not None:
-            if hasattr(card_data_obj, 'text'):
-                processed_space['cardData'] = card_data_obj.text
-            elif isinstance(card_data_obj, dict) or isinstance(card_data_obj, list):
-                try:
-                    processed_space['cardData'] = json.dumps(card_data_obj)
-                except TypeError:
-                    processed_space['cardData'] = str(card_data_obj)
-            else:
-                processed_space['cardData'] = str(card_data_obj)
-        else:
-            processed_space['cardData'] = ""
-        processed_for_df.append(processed_space)
-
-    if processed_for_df:
-        df = pd.DataFrame(processed_for_df)
-
-        df['category'] = df.apply(lambda x: categorize_space(x['id'].split('/')[-1], x['tags']), axis=1)
-
-        print("\nCategory Distribution:") # Ensure this header is printed
-        print(df['category'].value_counts())
-
-        print("\nDataFrame Head with Category:")
-        pd.set_option('display.max_colwidth', 50)
-        print(df[['id', 'author', 'likes', 'sdk', 'tags', 'category']].head())
-
-        print("\nDataFrame Info (with category):")
-        df.info(verbose=True)
-
-        # Define the NEW output filename for categorized data
-        output_directory = "/app/"
-        categorized_output_filename = "categorized_spaces_data.json"
-        absolute_categorized_path = os.path.join(output_directory, categorized_output_filename)
-
+def download_nltk_stopwords_resource():
+    ensure_nltk_data_path()
+    # print("\nChecking and downloading NLTK 'stopwords' resource...") # Quieter
+    try:
+        stopwords.words('english')
+    except LookupError:
+        print("NLTK 'stopwords' resource not found. Downloading...")
+        nltk.download('stopwords', quiet=False)
         try:
-            df.to_json(absolute_categorized_path, orient='records', indent=4)
-            print(f"\nCategorized data successfully saved to {absolute_categorized_path}")
-
-            if os.path.exists(absolute_categorized_path):
-                print(f"Verification: File '{absolute_categorized_path}' exists.")
-                stat_info = os.stat(absolute_categorized_path)
-                print(f"Verification: File size: {stat_info.st_size} bytes.")
-            else:
-                print(f"Verification ERROR: File '{absolute_categorized_path}' does NOT exist after saving.")
+            stopwords.words('english')
+            print("NLTK 'stopwords' resource downloaded and accessible.")
         except Exception as e:
-            print(f"\nError saving DataFrame to JSON: {e}")
+            print(f"Error accessing 'stopwords' after download: {e}.")
+    except Exception as e:
+        print(f"An error occurred while checking for stopwords: {e}. Attempting download.")
+        try:
+            nltk.download('stopwords', quiet=False)
+            stopwords.words('english')
+            print("NLTK 'stopwords' resource downloaded and accessible after error.")
+        except Exception as e_dl:
+            print(f"Critical error: Could not make 'stopwords' available: {e_dl}")
+
+def preprocess_text_simple(text_data, space_id_fallback):
+    current_text_to_process = ""
+    if isinstance(text_data, str) and text_data.strip():
+        current_text_to_process = text_data
+    elif isinstance(space_id_fallback, str):
+        current_text_to_process = space_id_fallback.split('/')[-1].replace('-', ' ')
     else:
-        print("\nNo spaces matched. DataFrame not created, nothing to save or categorize.")
+        return []
+
+    lower_text = current_text_to_process.lower()
+    no_punct_text = lower_text.translate(str.maketrans('', '', string.punctuation))
+    tokens = no_punct_text.split()
+
+    try:
+        eng_stopwords = stopwords.words('english')
+    except LookupError:
+        print("Error: Stopwords not available in preprocess_text_simple. Returning raw tokens.")
+        return [word for word in tokens if word.strip() and word.isalpha()]
+
+    processed_tokens = [
+        word for word in tokens if word not in eng_stopwords and word.strip() and word.isalpha()
+    ]
+    return processed_tokens
+
+def get_top_n_similar(space_id, cosine_sim_matrix, df, n=5):
+    if space_id not in df['id'].values:
+        print(f"Error: Space ID {space_id} not found in DataFrame for similarity lookup.")
+        return []
+    space_idx = df.index[df['id'] == space_id].tolist()[0]
+    sim_scores = list(enumerate(cosine_sim_matrix[space_idx]))
+    sorted_sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    top_scores_indices = sorted_sim_scores[1:n+1]
+    result = []
+    for i, score in top_scores_indices:
+        if i < len(df):
+            result.append((df['id'].iloc[i], score))
+        else:
+            print(f"Warning: Index {i} out of bounds for DataFrame of length {len(df)}.")
+    return result
+
+def main_processing_pipeline():
+    download_nltk_stopwords_resource()
+
+    input_directory = "/app/"
+    input_filename = "categorized_spaces_data.json" # This is the input for this script run
+    absolute_input_path = os.path.join(input_directory, input_filename)
+
+    if not os.path.exists(absolute_input_path):
+        print(f"Error: Input file {absolute_input_path} was not found.")
+        return
+
+    try:
+        df = pd.read_json(absolute_input_path, orient='records')
+    except Exception as e:
+        print(f"Error loading JSON into DataFrame: {e}")
+        return
+
+    df['processed_text'] = df.apply(
+        lambda row: preprocess_text_simple(
+            str(row['cardData']) if pd.notna(row['cardData']) else '',
+            row['id']
+        ),
+        axis=1
+    )
+    df['joined_processed_text'] = df['processed_text'].apply(lambda tokens: ' '.join(tokens))
+
+    vectorizer = TfidfVectorizer(max_features=1000, ngram_range=(1,2))
+
+    try:
+        tfidf_matrix = vectorizer.fit_transform(df['joined_processed_text'])
+        cosine_sim_matrix = cosine_similarity(tfidf_matrix)
+
+        # --- Exploration part (kept as per instruction) ---
+        print("\n--- Exploring Top N Similar Spaces (Sample) ---")
+        example_indices = [0, 10, 20]
+        if len(df) < 21:
+            example_indices = [i for i in range(min(len(df), 3))]
+        for idx_val in example_indices:
+            if idx_val < len(df):
+                example_space_id = df['id'].iloc[idx_val]
+                print(f"\nTop N similar spaces for: {example_space_id}")
+                original_space_details = df[df['id'] == example_space_id].iloc[0]
+                print(f"  Category: {original_space_details['category']}")
+                print(f"  Processed Text (first 15): {original_space_details['processed_text'][:15]}...")
+                top_similar = get_top_n_similar(example_space_id, cosine_sim_matrix, df, n=5)
+                for sim_id, score in top_similar:
+                    print(f"  - {sim_id} (Score: {score:.4f})")
+                    # similar_space_details = df[df['id'] == sim_id].iloc[0] # Could add more details if needed
+            else:
+                print(f"\nSkipping example index {idx_val} as DataFrame is too small.")
+        print("\n--- End of Exploration ---")
+        # --- End of Exploration part ---
+
+        # --- Saving artifacts ---
+        print("\n--- Saving Processed Data and Models ---")
+
+        # Save the DataFrame
+        df_output_filename = "/app/processed_spaces_with_text.json"
+        df.to_json(df_output_filename, orient='records', indent=4)
+        print(f"Processed DataFrame saved to {df_output_filename}")
+
+        # Save the TF-IDF matrix
+        tfidf_matrix_filename = "/app/tfidf_matrix.npz"
+        scipy.sparse.save_npz(tfidf_matrix_filename, tfidf_matrix)
+        print(f"TF-IDF matrix saved to {tfidf_matrix_filename}")
+
+        # Save the Cosine Similarity matrix
+        cosine_sim_matrix_filename = "/app/cosine_similarity_matrix.npy"
+        np.save(cosine_sim_matrix_filename, cosine_sim_matrix)
+        print(f"Cosine similarity matrix saved to {cosine_sim_matrix_filename}")
+
+        # Save the TfidfVectorizer object
+        vectorizer_filename = "/app/tfidf_vectorizer.pkl"
+        with open(vectorizer_filename, 'wb') as f:
+            pickle.dump(vectorizer, f)
+        print(f"TfidfVectorizer saved to {vectorizer_filename}")
+
+        print("\n--- All artifacts saved successfully. ---")
+
+    except ValueError as ve:
+        print(f"ValueError during TF-IDF or Cosine Similarity: {ve}")
+    except Exception as e:
+        print(f"An unexpected error occurred during processing or saving: {e}")
 
 if __name__ == "__main__":
-    fetch_process_categorize_and_save_final_data()
+    main_processing_pipeline()
+
+# Categories and categorize_space function (kept for reference, not used in main_processing_pipeline directly)
+categories = {
+    "Voice/Audio Processing": ["speech", "audio", "voice", "tts", "asr", "speaker", "sound", "musicgeneration"],
+}
+def categorize_space(title_or_id_suffix, tags):
+    return "Other"
