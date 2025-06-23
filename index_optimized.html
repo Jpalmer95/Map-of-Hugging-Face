@@ -312,6 +312,17 @@
         </div>
     </div>
 
+    
+    <!-- Performance optimizations for large datasets -->
+    <script>
+        // Add performance monitoring
+        console.time('Map Load Time');
+        
+        // Optimize rendering for large datasets
+        const CHUNK_SIZE = 1000; // Render points in chunks
+        const RENDER_DELAY = 10; // Delay between chunks
+    </script>
+    
     <script>
         // Error handling
         window.onerror = function(msg, url, lineNo, columnNo, error) {
@@ -680,6 +691,42 @@
             // Initialize visibility
             updateVisibility();
             
+            
+            // CHUNKED RENDERING FOR LARGE DATASETS
+            function renderPointsInChunks(points, chunkSize = 1000) {
+                let currentChunk = 0;
+                const totalChunks = Math.ceil(points.size() / chunkSize);
+                
+                function renderChunk() {
+                    const start = currentChunk * chunkSize;
+                    const end = Math.min(start + chunkSize, points.size());
+                    
+                    for (let i = start; i < end; i++) {
+                        const point = d3.select(points.nodes()[i]);
+                        point.classed("visible", true);
+                    }
+                    
+                    currentChunk++;
+                    
+                    // Update loading progress
+                    const progress = Math.round((currentChunk / totalChunks) * 100);
+                    document.getElementById('loading').textContent = `Loading points... ${progress}%`;
+                    
+                    if (currentChunk < totalChunks) {
+                        setTimeout(renderChunk, RENDER_DELAY);
+                    } else {
+                        document.getElementById('loading').style.display = 'none';
+                        console.timeEnd('Map Load Time');
+                        console.log('🎉 Large-scale map loaded successfully!');
+                    }
+                }
+                
+                renderChunk();
+            }
+            
+            // Use chunked rendering instead of immediate rendering
+            // renderPointsInChunks(allPoints);
+    
             console.log("🎉 Enhanced map initialization complete!");
             
         } catch (error) {
