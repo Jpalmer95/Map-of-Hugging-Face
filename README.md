@@ -1,24 +1,51 @@
-# Map of Hugging Face
+# Map of Hugging Face 🤗
 
-An interactive visualization of Hugging Face models, datasets, and spaces, inspired by the Map of GitHub.
+An interactive visualization of the Hugging Face ecosystem, inspired by the [Map of GitHub](https://anvaka.github.io/map-of-github/).
+
+## 🌍 [**View Live Map**](https://jpalmer95.github.io/Map-of-Hugging-Face/)
 
 ## Features
-- 🔺 Models (triangles), 🔲 Datasets (squares), 🔵 Spaces (circles)
-- 🔍 Search by name or tags
-- 🎛️ Filter by category and territory
-- 🖱️ Click to visit Hugging Face pages
-- 🔍 Zoom and pan to explore
 
-## Deployment
-This is a static HTML file that can be deployed to:
-- GitHub Pages
-- Netlify
-- Vercel
-- Any static hosting service
+- **🔺 Models** (5,000 items) - Triangular points
+- **🔲 Datasets** (2,000 items) - Square points  
+- **🔵 Spaces** (1,000 items) - Circular points
 
-## Data
-- Models: 5,000 most popular
-- Datasets: 2,000 most popular  
-- Spaces: 1,000 most popular
+### Interactive Features
+- 🔍 **Search** by name or tags
+- 🎛️ **Filter** by category and territory
+- 📏 **Zoom & Pan** to explore different regions
+- 🖱️ **Click** any point to visit the Hugging Face page
+- 💡 **Hover** for detailed tooltips
 
-Built with D3.js and the Hugging Face Hub API.
+### Territories
+The map organizes items into thematic territories based on their purpose:
+
+**Models Continent:**
+- NLP Core, Vision, Audio, Generative AI, Embeddings, Multimodal, etc.
+
+**Datasets Continent:**  
+- Text Corpora, Classification Data, Vision Data, Audio Data, etc.
+
+**Spaces Continent:**
+- Demos, Tools, Leaderboards, Games, etc.
+
+## Technical Details
+
+- **Data Source:** Hugging Face Hub API
+- **Visualization:** D3.js with UMAP clustering
+- **Total Items:** 8,000
+- **Last Updated:** 2025-06-23
+
+## How It Works
+
+1. **Data Collection:** Scraped top models, datasets, and spaces using the HF Hub API
+2. **Feature Extraction:** Analyzed tags and metadata for clustering
+3. **Clustering:** Used UMAP for 2D projection and territory assignment
+4. **Visualization:** Interactive D3.js map with zoom, search, and filtering
+
+## Inspiration
+
+Inspired by [Andrei Kashcha's Map of GitHub](https://github.com/anvaka/map-of-github), this project applies similar visualization techniques to the Hugging Face ecosystem.
+
+---
+Built with ❤️ using the Hugging Face Hub API and D3.js
